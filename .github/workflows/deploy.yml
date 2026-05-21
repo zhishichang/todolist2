@@ -76,4 +76,9 @@ jobs:
 
             npm install --production
             npx sequelize-cli db:migrate
-            pm2 restart todolist-server
+
+            if pm2 describe todolist-server > /dev/null 2>&1; then
+              pm2 restart todolist-server
+            else
+              pm2 start ecosystem.config.js
+            fi
