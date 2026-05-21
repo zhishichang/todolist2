@@ -4,9 +4,14 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -58,7 +63,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ${{ secrets.SERVER_DEPLOY_PATH }}/server
+            set -e
+            cd "${{ secrets.SERVER_DEPLOY_PATH }}/server"
             npm install --production
             npx sequelize-cli db:migrate
             pm2 restart todolist-server
