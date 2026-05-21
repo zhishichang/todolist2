@@ -103,26 +103,27 @@ jobs:
       - name: Deploy to server via rsync
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avzr --delete
+          switches: >-
+            -avzr --delete
+            --exclude=node_modules/
+            --exclude=.git/
+            --exclude=.env
+            --exclude=server/.env
+            --exclude=*.log
+            --exclude=.DS_Store
+            --exclude=client/src/
+            --exclude=client/node_modules/
+            --exclude=client/index.html
+            --exclude=client/vite.config.js
+            --exclude=client/tailwind.config.js
+            --exclude=client/postcss.config.js
+            --exclude=scripts/
+            --exclude=docs/
           path: ./
           remote_path: ${{ secrets.SERVER_DEPLOY_PATH }}
           remote_host: ${{ secrets.SERVER_HOST }}
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
-          excluded: |
-            node_modules/
-            .git/
-            .env
-            *.log
-            .DS_Store
-            client/src/
-            client/node_modules/
-            client/index.html
-            client/vite.config.js
-            client/tailwind.config.js
-            client/postcss.config.js
-            scripts/
-            docs/
 
       - name: Execute remote SSH commands
         uses: appleboy/ssh-action@v1
@@ -131,7 +132,16 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ${{ secrets.SERVER_DEPLOY_PATH }}/server
+            set -e
+            export NODE_ENV=production
+            cd "${{ secrets.SERVER_DEPLOY_PATH }}/server"
+
+            if [ ! -f .env ]; then
+              echo "ERROR: .env file not found at $(pwd)/.env"
+              echo "Please run init-server.sh on the server first."
+              exit 1
+            fi
+
             npm install --production
             npx sequelize-cli db:migrate
             pm2 restart todolist-server

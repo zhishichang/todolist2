@@ -98,23 +98,28 @@ jobs:
 
 ## rsync 排除规则
 
-```
-node_modules/
-.git/
-.env
-*.log
-.DS_Store
-client/src/
-client/node_modules/
-client/index.html
-client/vite.config.js
-client/tailwind.config.js
-client/postcss.config.js
-scripts/
-docs/
+`burnett01/rsync-deployments@7.0.1` 没有 `excluded` 输入参数，排除规则必须通过 `switches` 参数传递 `--exclude` 标志：
+
+```yaml
+switches: >-
+  -avzr --delete
+  --exclude=node_modules/
+  --exclude=.git/
+  --exclude=.env
+  --exclude=server/.env
+  --exclude=*.log
+  --exclude=.DS_Store
+  --exclude=client/src/
+  --exclude=client/node_modules/
+  --exclude=client/index.html
+  --exclude=client/vite.config.js
+  --exclude=client/tailwind.config.js
+  --exclude=client/postcss.config.js
+  --exclude=scripts/
+  --exclude=docs/
 ```
 
-- `.env` 被排除，服务器上的环境变量不会被覆盖
+- `.env` 和 `server/.env` 被排除，服务器上的环境变量不会被覆盖
 - 前端源码被排除，只同步构建产物 `dist/`
 
 ## SSH 远程部署步骤

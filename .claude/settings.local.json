@@ -58,7 +58,9 @@
       "Bash(chmod +x *)",
       "Bash(bash *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(rsync *)",
+      "Bash(python3 *)"
     ],
     "additionalDirectories": [
       "/private/tmp"
