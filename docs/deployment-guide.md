@@ -2,7 +2,7 @@
 
 ## 前置条件
 
-- Ubuntu 服务器（已安装 Nginx）
+- Ubuntu 服务器（全新系统，脚本会自动安装所有依赖）
 - GitHub 仓库：`zhishichang/todolist2`
 - 本地有 SSH 客户端
 
@@ -25,12 +25,14 @@ sudo /tmp/init-server.sh
 ```
 
 脚本会自动完成：
+- 系统更新
 - 安装 Node.js 22
 - 安装 PM2
 - 安装 MySQL 8.x
 - 创建数据库 `todolist` 和专用用户
 - 创建部署目录 `/var/www/todolist`
 - 生成 `.env` 配置文件
+- 安装 Nginx 并配置反向代理
 - 配置 UFW 防火墙
 
 执行过程中会提示输入：

@@ -63,15 +63,52 @@ EOF
 chmod 600 "${ENV_FILE}"
 echo ".env file created at ${ENV_FILE}"
 
-# 8. 配置防火墙
-# 注意：Nginx 需要单独安装（服务器已预装）
-# 如需安装：apt-get install -y nginx
+# 8. 安装 Nginx
+apt-get install -y nginx
+systemctl start nginx
+systemctl enable nginx
+echo "Nginx installed and started"
+
+# 9. 配置 Nginx 站点
+NGINX_CONF="/etc/nginx/sites-available/todolist"
+cat > "${NGINX_CONF}" <<'NGINX'
+server {
+    listen 80;
+    server_name _;
+
+    # 前端静态文件
+    location / {
+        root /var/www/todolist/client/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反向代理到 Node.js
+    location /api/ {
+        proxy_pass http://localhost:3000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+NGINX
+
+ln -sf "${NGINX_CONF}" /etc/nginx/sites-enabled/todolist
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
+echo "Nginx configured for todolist"
+
+# 10. 配置防火墙
 ufw allow OpenSSH
 ufw allow 'Nginx Full'
 ufw --force enable
 echo "Firewall configured"
 
-# 9. 完成
+# 11. 完成
 echo "=== 初始化完成 ==="
 echo "Deploy path: ${DEPLOY_PATH}"
 echo "Next steps:"
