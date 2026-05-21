@@ -1,5 +1,10 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+  echo "请使用 sudo 运行此脚本"
+  exit 1
+fi
 
 echo "=== TodoList 服务器初始化 ==="
 
@@ -39,8 +44,8 @@ echo "Database and user created"
 
 # 6. 创建部署目录
 DEPLOY_PATH="/var/www/todolist"
-mkdir -p ${DEPLOY_PATH}
-chown $SUDO_USER:$SUDO_USER ${DEPLOY_PATH}
+mkdir -p "${DEPLOY_PATH}"
+chown "$SUDO_USER":"$SUDO_USER" "${DEPLOY_PATH}"
 echo "Deploy directory created: ${DEPLOY_PATH}"
 
 # 7. 创建 .env 文件
@@ -59,6 +64,8 @@ chmod 600 "${ENV_FILE}"
 echo ".env file created at ${ENV_FILE}"
 
 # 8. 配置防火墙
+# 注意：Nginx 需要单独安装（服务器已预装）
+# 如需安装：apt-get install -y nginx
 ufw allow OpenSSH
 ufw allow 'Nginx Full'
 ufw --force enable
