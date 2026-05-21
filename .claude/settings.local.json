@@ -56,7 +56,9 @@
       "Bash(NODE_ENV=production node server/app.js)",
       "Bash(git -C /Users/zsc/Desktop/todolist remote -v)",
       "Bash(chmod +x *)",
-      "Bash(bash *)"
+      "Bash(bash *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ],
     "additionalDirectories": [
       "/private/tmp"
