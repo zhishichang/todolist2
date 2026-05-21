@@ -67,5 +67,17 @@ jobs:
             export NODE_ENV=production
             cd "${{ secrets.SERVER_DEPLOY_PATH }}/server"
             npm install --production
+
+            # === 诊断信息 ===
+            echo "=== Diagnostic Info ==="
+            echo "NODE_ENV=$NODE_ENV"
+            echo ".env file exists: $(test -f .env && echo YES || echo NO)"
+            echo ".env contents (redacted):"
+            if [ -f .env ]; then
+              sed 's/PASSWORD=.*/PASSWORD=***REDACTED***/' .env
+            fi
+            echo "MySQL status: $(systemctl is-active mysql)"
+            echo "=== End Diagnostic ==="
+
             npx sequelize-cli db:migrate
             pm2 restart todolist-server
