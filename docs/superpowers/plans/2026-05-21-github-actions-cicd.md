@@ -1,0 +1,288 @@
+# GitHub Actions CI/CD 部署实现计划
+
+> **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
+
+**目标：** 通过 GitHub Actions 实现 Push 到 main 自动部署前后端到 Ubuntu 服务器
+
+**架构：** 单 workflow 文件，构建前端 → rsync 同步 → SSH 远程执行迁移和重启 PM2。附带服务器初始化脚本用于新服务器环境准备。
+
+**技术栈：** GitHub Actions, rsync, SSH, PM2, Node.js 22, MySQL 8.x
+
+---
+
+## 文件结构
+
+| 文件 | 职责 |
+|---|---|
+| `scripts/init-server.sh` | 新服务器环境初始化（Node.js, PM2, MySQL, 防火墙） |
+| `.github/workflows/deploy.yml` | CI/CD workflow（构建、同步、部署） |
+
+---
+
+### 任务 1：创建服务器初始化脚本
+
+**文件：**
+- 创建：`scripts/init-server.sh`
+
+- [ ] **步骤 1：创建 scripts 目录**
+
+运行：`mkdir -p scripts`
+
+- [ ] **步骤 2：编写 init-server.sh**
+
+创建 `scripts/init-server.sh`，内容如下：
+
+```bash
+#!/bin/bash
+set -e
+
+echo "=== TodoList 服务器初始化 ==="
+
+# 1. 系统更新
+apt-get update && apt-get upgrade -y
+
+# 2. 安装 Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs
+echo "Node.js $(node -v) installed"
+
+# 3. 安装 PM2
+npm install -g pm2
+echo "PM2 installed"
+
+# 4. 安装 MySQL
+apt-get install -y mysql-server
+systemctl start mysql
+systemctl enable mysql
+echo "MySQL installed and started"
+
+# 5. 创建数据库和用户
+read -sp "Enter MySQL root password: " MYSQL_ROOT_PW
+echo
+read -p "Enter todolist DB username [todolist_user]: " DB_USER
+DB_USER=${DB_USER:-todolist_user}
+read -sp "Enter todolist DB password: " DB_PW
+echo
+
+mysql -u root -p"${MYSQL_ROOT_PW}" <<EOF
+CREATE DATABASE IF NOT EXISTS todolist CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PW}';
+GRANT ALL PRIVILEGES ON todolist.* TO '${DB_USER}'@'localhost';
+FLUSH PRIVILEGES;
+EOF
+echo "Database and user created"
+
+# 6. 创建部署目录
+DEPLOY_PATH="/var/www/todolist"
+mkdir -p ${DEPLOY_PATH}
+chown $SUDO_USER:$SUDO_USER ${DEPLOY_PATH}
+echo "Deploy directory created: ${DEPLOY_PATH}"
+
+# 7. 创建 .env 文件
+ENV_FILE="${DEPLOY_PATH}/server/.env"
+mkdir -p "${DEPLOY_PATH}/server"
+cat > "${ENV_FILE}" <<EOF
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=todolist
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PW}
+PORT=3000
+NODE_ENV=production
+EOF
+chmod 600 "${ENV_FILE}"
+echo ".env file created at ${ENV_FILE}"
+
+# 8. 配置防火墙
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw --force enable
+echo "Firewall configured"
+
+# 9. 完成
+echo "=== 初始化完成 ==="
+echo "Deploy path: ${DEPLOY_PATH}"
+echo "Next steps:"
+echo "  1. Upload your SSH public key for GitHub Actions"
+echo "  2. Configure GitHub Secrets"
+echo "  3. Push to main to trigger first deployment"
+```
+
+- [ ] **步骤 3：设置脚本权限**
+
+运行：`chmod +x scripts/init-server.sh`
+
+- [ ] **步骤 4：Commit**
+
+```bash
+git add scripts/init-server.sh
+git commit -m "feat: add server initialization script"
+```
+
+---
+
+### 任务 2：创建 GitHub Actions Workflow
+
+**文件：**
+- 创建：`.github/workflows/deploy.yml`
+
+- [ ] **步骤 1：创建目录**
+
+运行：`mkdir -p .github/workflows`
+
+- [ ] **步骤 2：编写 deploy.yml**
+
+创建 `.github/workflows/deploy.yml`，内容如下：
+
+```yaml
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: client
+        run: npm run build
+
+      - name: Deploy to server via rsync
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete
+          path: ./
+          remote_path: ${{ secrets.SERVER_DEPLOY_PATH }}
+          remote_host: ${{ secrets.SERVER_HOST }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          excluded: |
+            node_modules/
+            .git/
+            .env
+            *.log
+            .DS_Store
+            client/src/
+            client/node_modules/
+            client/index.html
+            client/vite.config.js
+            client/tailwind.config.js
+            client/postcss.config.js
+            scripts/
+            docs/
+
+      - name: Execute remote SSH commands
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ secrets.SERVER_DEPLOY_PATH }}/server
+            npm install --production
+            npx sequelize-cli db:migrate
+            pm2 restart todolist-server
+```
+
+- [ ] **步骤 3：Commit**
+
+```bash
+git add .github/workflows/deploy.yml
+git commit -m "feat: add GitHub Actions deploy workflow"
+```
+
+---
+
+### 任务 3：验证文件完整性
+
+- [ ] **步骤 1：确认文件存在**
+
+运行：`ls -la scripts/init-server.sh .github/workflows/deploy.yml`
+
+预期：两个文件都存在，init-server.sh 有可执行权限
+
+- [ ] **步骤 2：验证 YAML 语法**
+
+运行：`python3 -c "import yaml; yaml.safe_load(open('.github/workflows/deploy.yml'))"`
+
+预期：无报错
+
+- [ ] **步骤 3：验证 shell 脚本语法**
+
+运行：`bash -n scripts/init-server.sh`
+
+预期：无报错
+
+- [ ] **步骤 4：最终 Commit（如有遗漏文件）**
+
+```bash
+git status
+# 确认没有未提交的变更
+```
+
+---
+
+## 部署后操作清单
+
+完成代码后，用户需要手动执行以下步骤：
+
+### 1. 服务器初始化（一次性）
+
+```bash
+# 上传脚本到服务器
+scp scripts/init-server.sh user@server_ip:/tmp/
+
+# SSH 到服务器执行
+ssh user@server_ip
+chmod +x /tmp/init-server.sh
+sudo /tmp/init-server.sh
+```
+
+### 2. 配置 SSH 密钥
+
+```bash
+# 本地生成密钥
+ssh-keygen -t ed25519 -C "github-actions-deploy"
+
+# 将公钥添加到服务器
+ssh-copy-id -i ~/.ssh/id_ed25519.pub user@server_ip
+
+# 查看私钥内容（复制到 GitHub Secrets）
+cat ~/.ssh/id_ed25519
+```
+
+### 3. 配置 GitHub Secrets
+
+在仓库 Settings → Secrets and variables → Actions 中添加：
+
+| Secret | 值 |
+|---|---|
+| `SSH_PRIVATE_KEY` | 私钥完整内容（包含 BEGIN/END 行） |
+| `SERVER_HOST` | 服务器 IP |
+| `SERVER_USER` | SSH 用户名 |
+| `SERVER_DEPLOY_PATH` | `/var/www/todolist` |
+
+### 4. 首次部署
+
+```bash
+git push origin main
+```
+
+然后在 GitHub 仓库的 Actions 标签页查看部署状态。
