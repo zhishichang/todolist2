@@ -45,6 +45,7 @@ jobs:
             node_modules/
             .git/
             .env
+            server/.env
             *.log
             .DS_Store
             client/src/
@@ -66,18 +67,13 @@ jobs:
             set -e
             export NODE_ENV=production
             cd "${{ secrets.SERVER_DEPLOY_PATH }}/server"
-            npm install --production
 
-            # === 诊断信息 ===
-            echo "=== Diagnostic Info ==="
-            echo "NODE_ENV=$NODE_ENV"
-            echo ".env file exists: $(test -f .env && echo YES || echo NO)"
-            echo ".env contents (redacted):"
-            if [ -f .env ]; then
-              sed 's/PASSWORD=.*/PASSWORD=***REDACTED***/' .env
+            if [ ! -f .env ]; then
+              echo "ERROR: .env file not found at $(pwd)/.env"
+              echo "Please run init-server.sh on the server first."
+              exit 1
             fi
-            echo "MySQL status: $(systemctl is-active mysql)"
-            echo "=== End Diagnostic ==="
 
+            npm install --production
             npx sequelize-cli db:migrate
             pm2 restart todolist-server
