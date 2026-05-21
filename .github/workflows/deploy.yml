@@ -64,6 +64,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+            export NODE_ENV=production
             cd "${{ secrets.SERVER_DEPLOY_PATH }}/server"
             npm install --production
             npx sequelize-cli db:migrate
